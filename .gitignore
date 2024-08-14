@@ -1,0 +1,37 @@
+# Terraform files
+*.tfstate
+*.tfstate.backup
+.terraform/
+.terraform.tfstate.lock.info
+
+# Let users define local automatic tfvars without adding to source control.
+*.auto.tfvars
+
+# SSH keys
+*.pem
+
+# Local environment files
+.env
+
+# Python virtual environment
+venv/
+__pycache__/
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Local files
+.local/
+
+# Log files
+*.log
+
+# Infracost
+.infracost/
+
+# IDEA
+.idea/
+
+# Temp folders
+.tmp/
