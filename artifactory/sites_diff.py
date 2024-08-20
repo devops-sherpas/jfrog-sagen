@@ -64,6 +64,13 @@ def diff(
         _raise_for_status(response)
         return {item["uri"]: item for item in response.json()["files"]}
 
+    def _repository_details(url: str, token: str, key: str) -> dict[str, Any]:
+        response = requests.get(
+                f"{url}/artifactory/api/repositories/{key}",
+                headers=_auth_header(token))
+        _raise_for_status(response)
+        return response.json()
+
     repositories_1 = _repository_keys(url_1, token_1)
     repositories_2 = _repository_keys(url_2, token_2)
 
@@ -73,6 +80,8 @@ def diff(
     missing_in_2 = repositories_1_keys - repositories_2_keys
     exists_in_both = repositories_1_keys.intersection(repositories_2_keys)
     rclass_mismatch: list[str] = []
+    package_type_mismatch: list[str] = []
+    virtual_composition_mismatch: list[str] = []
 
     for key in missing_in_1:
         logger.info("Repository exists in site 2 and missing in site 1: %s", key)
@@ -84,6 +93,17 @@ def diff(
         if rclass_1 != rclass_2:
             logger.info("Repository %s is of type %s on site 1, but %s on site 2", key, rclass_1, rclass_2)
             rclass_mismatch.append(key)
+        package_type_1 = repositories_1[key]["packageType"]
+        package_type_2 = repositories_2[key]["packageType"]
+        if package_type_1 != package_type_2:
+            logger.info("Repository %s is of package type %s on site 1, but %s on site 2", key, package_type_1, package_type_2)
+            package_type_mismatch.append(key)
+        if rclass_1 == "VIRTUAL":
+            repo_details_1 = _repository_details(url_1, token_1, key)
+            repo_details_2 = _repository_details(url_2, token_2, key)
+            if repo_details_1["repositories"] != repo_details_2["repositories"]:
+                logger.info("Virtual repository %s has a different repository composition between the two sites", key)
+                virtual_composition_mismatch.append(key)
 
     artifacts_report = None
     if not exclude_artifacts:
@@ -114,14 +134,28 @@ def diff(
                 if item_in_1["sha1"] != item_in_2["sha1"] or item_in_1["sha2"] != item_in_2["sha2"]:
                     _artifacts_report().setdefault("diffs", []).append(uri)
 
+    repositories_report = {}
     report = {
-        "repositories": {
-            "missing_in_1"   : list(missing_in_1),
-            "missing_in_2"   : list(missing_in_2),
-            "rclass_mismatch": rclass_mismatch
-        },
-        "artifacts"   : artifacts_report
+        "repositories": repositories_report,
+        "artifacts": artifacts_report
     }
+
+    # Only include if items of concern exist.
+
+    if missing_in_1:
+        repositories_report["missing_in_1"] = list(missing_in_1)
+
+    if missing_in_2:
+        repositories_report["missing_in_2"] = list(missing_in_2)
+
+    if rclass_mismatch:
+        repositories_report["rclass_mismatch"] = rclass_mismatch
+
+    if package_type_mismatch:
+        repositories_report["package_type_mismatch"] = package_type_mismatch
+
+    if virtual_composition_mismatch:
+        repositories_report["virtual_composition_mismatch"] = virtual_composition_mismatch
 
     json.dump(report, sys.stdout, indent=2)
 
